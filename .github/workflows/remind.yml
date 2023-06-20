@@ -1,0 +1,33 @@
+name: Remind 
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+  readwise_clone:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+
+      - name: Build
+        run: go build -o remind 
+
+      - name: Execute script
+        run: ./remind
+
+      - name: Send email
+        env:
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }} 
+        run: |
+          echo "Sending email..."
+          ./remind
+

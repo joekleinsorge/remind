@@ -1,0 +1,4 @@
+.env
+sendgrid.env
+.DS_Store
+clippings.txt
