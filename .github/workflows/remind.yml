@@ -18,10 +18,13 @@ jobs:
         with:
           go-version: 1.16
 
+      - name: Build
+        run: go build
+
       - name: Send email
         env:
           SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }} 
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-        run: go run remind.go
+        run: ./remind
 
