@@ -1,4 +1,4 @@
-package main
+package remind
 
 import (
 	"bytes"
@@ -66,6 +66,7 @@ func main() {
 	log.Println("Email sent successfully!")
 }
 
+// Parse the clippings from the Kindle file
 func parseClippings(data string) []Clipping {
 	// Split the data into individual clippings
 	delimiter := "=========="
@@ -117,7 +118,7 @@ func parseClippings(data string) []Clipping {
 	return clippingSlice
 }
 
-// selects a given number of random clips from the clippings.
+// Selects a given number of random clips from the clippings
 func selectRandomClippings(clippings []Clipping, count int) []Clipping {
 	// Set the random seed
 	rand.Seed(time.Now().UnixNano())
@@ -142,7 +143,7 @@ func extractSubmatch(clipping string, regex *regexp.Regexp, label string) string
 	return match[1]
 }
 
-// sendEmail sends an email with the selected quotes.
+// Send an email with the selected clippings
 func sendEmail(apiKey, senderEmail, recipientEmail, emailContent string) error {
 
 	message := mail.NewSingleEmail(
