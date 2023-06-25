@@ -1,4 +1,4 @@
-package remind
+package main
 
 import (
 	"bytes"
