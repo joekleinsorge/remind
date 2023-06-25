@@ -19,7 +19,7 @@ jobs:
           go-version: 1.16
 
       - name: Resolve missing dependency
-        run: go mod download github.com/davecgh/go-spew@v1.1.1
+        run: go mod download github.com/davecgh/go-spew
 
       - name: Build
         run: go build .
