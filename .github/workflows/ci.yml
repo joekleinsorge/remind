@@ -35,9 +35,10 @@ jobs:
   
       - name: Install golint
         run: go install golang.org/x/lint/golint@latest
-  
-      - name: Run golint
-        run: golint ./...
-  
+      
+      - uses: golangci/golangci-lint-action@v3.4.0
+        with:
+          args: "--out-${NO_FUTURE}format colored-line-number"
+          
       - name: Run tests
         run: go test -race -vet=off ./...
