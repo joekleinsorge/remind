@@ -21,14 +21,10 @@ jobs:
       - name: Resolve missing dependency
         run: go mod download github.com/davecgh/go-spew
 
-      # - name: Build
-      #   run: go build .
-
       - name: Send email
         env:
           SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }} 
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-        # run: ./remind
         run: go run remind.go
 
