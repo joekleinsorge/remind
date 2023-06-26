@@ -1,5 +1,6 @@
 # Remind
-*A Readwise Email Clone*
+*A Readwise Email Clone*  
+[![Go Report Card](https://goreportcard.com/badge/joekleinsorge/sonos-spotify-shuffle)](https://goreportcard.com/report/joekleinsorge/remind)
 
 Remind is a Go script that clones what I liked best about Readwise, particularly the daily email reminder of your Kindle highlights.
 This script is run using a GitHub Actions Workflow triggered by a cron schedule.
