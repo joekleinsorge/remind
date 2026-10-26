@@ -1,168 +1,170 @@
 package main
 
 import (
-	"bytes"
+	"flag"
 	"fmt"
-	"html/template"
-	"io/ioutil"
 	"log"
-	"math/rand"
 	"os"
-	"regexp"
 	"strings"
 	"time"
-
-	"github.com/sendgrid/sendgrid-go"
-	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
 
-// Define the struct for the clipping
-type Clipping struct {
-	Title     string
-	Author    string
-	Page      string
-	When      string
-	Highlight string
+type config struct {
+	configPath string
+	app        appConfig
+	serve      string
+	importPath string
+	importURL  string
 }
 
 func main() {
-	// Read the contents of the clippings.txt file
-	filePath := "clippings.txt"
-	content, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		fmt.Printf("Failed to read the file: %v", err)
+	cfg := parseConfig()
+	if cfg.importPath != "" {
+		if cfg.serve != "" {
+			log.Fatal("--import and --serve cannot be used together")
+		}
+		if err := runImport(cfg.importPath, cfg.importURL); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if cfg.serve != "" {
+		if err := serveApp(cfg.app, cfg.serve); err != nil {
+			log.Fatal(err)
+		}
 		return
 	}
 
-	// Parse the clippings
+	content, err := os.ReadFile(cfg.app.ClippingsPath)
+	if err != nil {
+		log.Fatalf("Failed to read the file: %v", err)
+	}
+
 	clippingSlice := parseClippings(string(content))
+	if len(clippingSlice) == 0 {
+		log.Fatal("No valid clippings found")
+	}
+	log.Printf("Parsed %d unique highlights from %s", len(clippingSlice), cfg.app.ClippingsPath)
 
-	// Select 3 random quotes
-	selectedClippings := selectRandomClippings(clippingSlice, 3)
+	state, err := loadReminderState(cfg.app.StatePath)
+	if err != nil {
+		log.Fatalf("Failed to load reminder state: %v", err)
+	}
+	if cfg.app.PruneMissing {
+		state.Prune(clippingSlice)
+		log.Println("Pruned state entries that are no longer present in clippings")
+	}
 
-	// pull in environment variables
+	now := time.Now()
+	dueCount := len(filterDueClippings(clippingSlice, state, now))
+	selectedClippings := selectClippings(clippingSlice, cfg.app.Count, state, now)
+	log.Printf("Found %d due highlights; selected %d", dueCount, len(selectedClippings))
+	if len(selectedClippings) == 0 {
+		log.Println("No highlights are due for review.")
+		return
+	}
+
+	subject, plainTextContent, htmlContent, err := buildEmail(selectedClippings, func() string {
+		return now.Format("Monday, January 2, 2006")
+	}, cfg.app.TemplatePath)
+	if err != nil {
+		log.Fatalf("Failed to render email: %v", err)
+	}
+
+	if cfg.app.PreviewPath != "" {
+		if err := os.WriteFile(cfg.app.PreviewPath, []byte(htmlContent), 0o644); err != nil {
+			log.Fatalf("Failed to write preview: %v", err)
+		}
+		log.Printf("Preview written to %s", cfg.app.PreviewPath)
+		return
+	}
+
+	if cfg.app.DryRun {
+		printDryRun(subject, selectedClippings, state, now)
+		return
+	}
+
 	sendgridAPIKey := os.Getenv("SENDGRID_API_KEY")
 	senderEmail := os.Getenv("SENDER_EMAIL")
 	recipientEmail := os.Getenv("RECIPIENT_EMAIL")
-
-	// Use the template to generate the email
-	var tmplFile = "email.tmpl"
-
-	tmpl, err := template.New(tmplFile).ParseFiles(tmplFile)
-	if err != nil {
-		panic(err)
+	if sendgridAPIKey == "" || senderEmail == "" || recipientEmail == "" {
+		log.Fatal("Missing one or more required environment variables: SENDGRID_API_KEY, SENDER_EMAIL, RECIPIENT_EMAIL")
 	}
 
-	var emailContent bytes.Buffer
-	err = tmpl.Execute(&emailContent, selectedClippings)
-	if err != nil {
-		log.Fatalf("Failed to execute template: %s", err)
+	state.MarkPending(selectedClippings, now)
+	if err := saveReminderState(cfg.app.StatePath, state); err != nil {
+		log.Fatalf("Failed to save pending reminder state: %v", err)
 	}
 
-	err = sendEmail(sendgridAPIKey, senderEmail, recipientEmail, emailContent.String())
-	if err != nil {
+	if err := sendEmail(sendgridAPIKey, senderEmail, recipientEmail, subject, plainTextContent, htmlContent); err != nil {
+		state.MarkFailed(selectedClippings, time.Now())
+		if saveErr := saveReminderState(cfg.app.StatePath, state); saveErr != nil {
+			log.Printf("Failed to clear pending reminder state after send failure: %v", saveErr)
+		}
 		log.Fatalf("Failed to send email: %s", err)
 	}
+
+	state.MarkReviewed(selectedClippings, now, reviewIntervals(cfg.app.ReviewIntervalsDays))
+	if err := saveReminderState(cfg.app.StatePath, state); err != nil {
+		log.Fatalf("Failed to save reminder state: %v", err)
+	}
+
 	log.Println("Email sent successfully!")
 }
 
-// Parse the clippings from the Kindle file
-func parseClippings(data string) []Clipping {
-	// Split the data into individual clippings
-	delimiter := "=========="
-	clippings := strings.Split(data, delimiter)
+func parseConfig() config {
+	cfg := config{}
+	cfg.configPath = configPathFromArgs(os.Args[1:])
 
-	// Define the regular expression patterns to extract the required information
-	titlePattern := `^([^\n(]+)`                      //string up until the first parenthesis
-	authorPattern := `\((.*?)\)`                      //string between the first and second parenthesis
-	pagePattern := `on page (\d+)`                    //string after the word "page"
-	whenPattern := `Added on\s+(.+)`                  //string after the word "Added"
-	highlightPattern := `Added on[^\n]+\n?\r?\n?(.*)` //string after the word "Added" and the newline
-
-	// Create a slice to store the clippings
-	clippingSlice := []Clipping{}
-
-	// Extract the information for each clipping
-	for _, clipping := range clippings {
-		// Trim leading and trailing whitespace from the clipping
-		clipping = strings.TrimSpace(clipping)
-
-		// Skip empty clippings
-		if clipping == "" {
-			continue
+	if cfg.configPath != "" {
+		fileConfig, err := loadAppConfig(cfg.configPath)
+		if err != nil {
+			log.Fatalf("Failed to load config: %v", err)
 		}
+		cfg.app = fileConfig
+	} else {
+		cfg.app = defaultAppConfig()
+	}
 
-		// Extract the information using regex
-		titleRegex := regexp.MustCompile(titlePattern)
-		authorRegex := regexp.MustCompile(authorPattern)
-		pageRegex := regexp.MustCompile(pagePattern)
-		whenRegex := regexp.MustCompile(whenPattern)
-		highlightRegex := regexp.MustCompile(highlightPattern)
+	flag.StringVar(&cfg.configPath, "config", cfg.configPath, "path to JSON config file")
+	flag.StringVar(&cfg.app.ClippingsPath, "clippings", cfg.app.ClippingsPath, "path to Kindle clippings file")
+	flag.IntVar(&cfg.app.Count, "count", cfg.app.Count, "number of highlights to include")
+	flag.StringVar(&cfg.app.StatePath, "state", cfg.app.StatePath, "path to reminder state file")
+	flag.StringVar(&cfg.app.TemplatePath, "template", cfg.app.TemplatePath, "path to HTML email template")
+	flag.StringVar(&cfg.app.PreviewPath, "preview", cfg.app.PreviewPath, "write rendered HTML email to this path instead of sending")
+	flag.BoolVar(&cfg.app.DryRun, "dry-run", cfg.app.DryRun, "print selected highlights without sending or updating state")
+	flag.StringVar(&cfg.serve, "serve", "", "run the web app at this address (for example :8080)")
+	flag.StringVar(&cfg.importPath, "import", "", "import clippings through a running server; use - for stdin")
+	flag.StringVar(&cfg.importURL, "import-url", "http://127.0.0.1:8080/api/import", "running server import endpoint")
+	flag.Parse()
+	return cfg
+}
 
-		title := extractSubmatch(clipping, titleRegex, "title")
-		author := extractSubmatch(clipping, authorRegex, "author")
-		page := extractSubmatch(clipping, pageRegex, "page")
-		when := extractSubmatch(clipping, whenRegex, "when")
-		highlight := extractSubmatch(clipping, highlightRegex, "highlight")
-
-		// Create a new Clipping struct and append it to the slice
-		newClipping := Clipping{
-			Title:     title,
-			Author:    author,
-			Page:      page,
-			When:      when,
-			Highlight: highlight,
+func configPathFromArgs(args []string) string {
+	for idx, arg := range args {
+		if arg == "--config" && idx+1 < len(args) {
+			return args[idx+1]
 		}
-		clippingSlice = append(clippingSlice, newClipping)
+		if strings.HasPrefix(arg, "--config=") {
+			return strings.TrimPrefix(arg, "--config=")
+		}
 	}
-	return clippingSlice
+	return ""
 }
 
-// Selects a given number of random clips from the clippings
-func selectRandomClippings(clippings []Clipping, count int) []Clipping {
-	// Set the random seed
-	rand.Seed(time.Now().UnixNano())
-
-	// Shuffle the clippings
-	rand.Shuffle(len(clippings), func(i, j int) {
-		clippings[i], clippings[j] = clippings[j], clippings[i]
-	})
-
-	// Select the desired number of clips
-	clips := clippings[:count]
-
-	return clips
-}
-
-// Function to extract submatch and handle errors
-func extractSubmatch(clipping string, regex *regexp.Regexp, label string) string {
-	match := regex.FindStringSubmatch(clipping)
-	if len(match) < 2 {
-		log.Fatalf("Failed to extract %s from clipping", label)
+func printDryRun(subject string, selected []Clipping, state ReminderState, now time.Time) {
+	fmt.Printf("Subject: %s\n", subject)
+	fmt.Printf("Due highlights selected at %s:\n", now.UTC().Format(time.RFC3339))
+	for idx, clipping := range selected {
+		review, _ := state.Review(clipping)
+		fmt.Printf("%d. %s - %s\n", idx+1, clipping.Title, clipping.Author)
+		fmt.Printf("   id: %s\n", clipping.ID)
+		fmt.Printf("   sent: %d\n", review.SendCount)
+		if review.NextDueAt != "" {
+			fmt.Printf("   next due: %s\n", review.NextDueAt)
+		}
+		if metadata := clippingMetadata(clipping); metadata != "" {
+			fmt.Printf("   %s\n", metadata)
+		}
 	}
-	return match[1]
-}
-
-// Send an email with the selected clippings
-func sendEmail(apiKey, senderEmail, recipientEmail, emailContent string) error {
-
-	message := mail.NewSingleEmail(
-		mail.NewEmail("Remind App", senderEmail),
-		"Here is your REMINDer",
-		mail.NewEmail("You", recipientEmail),
-		"",
-		emailContent,
-	)
-
-	client := sendgrid.NewSendClient(apiKey)
-	response, err := client.Send(message)
-	if err != nil {
-		return fmt.Errorf("failed to send email: %s", err)
-	}
-
-	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		return nil
-	}
-
-	return fmt.Errorf("failed to send email: status code %d", response.StatusCode)
 }

@@ -1,3 +1,13 @@
 .env
 sendgrid.env
 .DS_Store
+.remind-state.json
+preview.html
+remind
+library.json
+email-day.json
+delivery-status.json
+.remind-import-*
+.remind-state-*.tmp
+/freshlab/
+/.playwright-mcp/

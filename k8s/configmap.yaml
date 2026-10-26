@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: remind-config
+  namespace: remind
+data:
+  remind.json: |
+    {
+      "clippings_path": "/data/clippings.txt",
+      "count": 5,
+      "state_path": "/data/remind-state.json",
+      "template_path": "/app/email.tmpl",
+      "review_intervals_days": [7, 30, 90, 180]
+    }
