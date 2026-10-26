@@ -14,6 +14,11 @@ for resource in configmap deployment service route networkpolicy pvc; do
   cp "$repo_dir/k8s/$resource.yaml" "$bundle_dir/remind/"
 done
 
+# Freshlab validates the raw manifest as well as rendered Kustomize output.
+sed "s|image: ghcr.io/joekleinsorge/remind[^[:space:]]*|image: ghcr.io/joekleinsorge/remind@$remind_digest|" \
+  "$bundle_dir/remind/deployment.yaml" > "$bundle_dir/remind/deployment.yaml.tmp"
+mv "$bundle_dir/remind/deployment.yaml.tmp" "$bundle_dir/remind/deployment.yaml"
+
 # The Freshlab apps project creates namespaces separately and uses volume backups.
 # Rebuild the image stanza so existing Renovate pins cannot override this build.
 awk '

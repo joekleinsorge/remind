@@ -19,6 +19,7 @@ These manifests prepare the deployment; their presence does not mean the app is 
 
    Add the matching `REMIND_SSO_CLIENT_SECRET` to the SOPS-managed `dex-secrets` Secret in the `dex` namespace. Dex and OAuth2 Proxy must receive the same client secret. The existing `freshlab-admins` group grants access.
 5. Optional email: provision the SOPS-managed `remind-sendgrid` Secret with `SENDGRID_API_KEY`, `SENDER_EMAIL`, `RECIPIENT_EMAIL`. Include `REMIND_EMAIL_TIME: "05:00"` in that Secret to enable the integrated scheduler. The Secret is optional; no email is sent by default.
+6. Provision a SOPS-managed `kubernetes.io/dockerconfigjson` Secret named `ghcr-pull` in namespace `remind` using the existing Freshlab registry pull credential. Register it with KSOPS; the deployment uses it to pull the GHCR image.
 
 Alternatively, use the [External Secrets manifests](../k8s/external-secrets/README.md) included in the publishing artifact. Configure the existing store and remote paths first, then give External Secrets sole ownership of the two target secrets. Keep the shared Dex client secret synchronized in the Dex namespace through its existing secret management.
 
