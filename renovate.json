@@ -1,0 +1,15 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "docker:pinDigests", "helpers:pinGitHubActionDigests"],
+  "automerge": false,
+  "kubernetes": {
+    "managerFilePatterns": ["/k8s/.*\\.ya?ml$/"]
+  },
+  "packageRules": [
+    {
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["digest", "pinDigest"],
+      "groupName": "container image digests"
+    }
+  ]
+}

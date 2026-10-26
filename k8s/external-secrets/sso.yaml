@@ -1,0 +1,19 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: remind-sso
+  namespace: remind
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: replace-with-your-store
+    kind: ClusterSecretStore
+  target:
+    name: remind-sso
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: clientSecret
+      remoteRef: {key: remind/sso, property: clientSecret}
+    - secretKey: cookieSecret
+      remoteRef: {key: remind/sso, property: cookieSecret}

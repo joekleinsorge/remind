@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remind
+  namespace: remind
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: remind}
+  template:
+    metadata:
+      labels: {app: remind}
+    spec:
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-pull
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: remind
+          image: ghcr.io/joekleinsorge/remind:main
+          args: ["--serve=127.0.0.1:8080", "--config=/config/remind.json"]
+          env:
+            - {name: REMIND_TIMEZONE, value: America/New_York}
+            # Set REMIND_EMAIL_TIME=05:00 when SendGrid is configured.
+          envFrom:
+            - secretRef: {name: remind-sendgrid, optional: true}
+          resources:
+            requests: {cpu: 25m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          # The application binds only loopback; probes run through the proxy's
+          # one unauthenticated endpoint. All other paths require Dex login.
+          readinessProbe:
+            httpGet: {path: /healthz, port: auth}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: auth}
+            periodSeconds: 30
+          startupProbe:
+            httpGet: {path: /healthz, port: auth}
+            periodSeconds: 3
+            failureThreshold: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: config, mountPath: /config, readOnly: true}
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
+          args:
+            - --provider=oidc
+            - --oidc-issuer-url=https://dex.kleinsorge.dev
+            - --skip-oidc-discovery=true
+            - --login-url=https://dex.kleinsorge.dev/auth
+            - --redeem-url=http://dex.dex.svc.cluster.local:5556/token
+            - --oidc-jwks-url=http://dex.dex.svc.cluster.local:5556/keys
+            - --skip-claims-from-profile-url=true
+            - --http-address=0.0.0.0:4180
+            - --upstream=http://127.0.0.1:8080/
+            - --redirect-url=https://remind.kleinsorge.dev/oauth2/callback
+            - --email-domain=*
+            - --allowed-group=freshlab-admins
+            - --scope=openid profile email groups
+            - --code-challenge-method=S256
+            - --cookie-domain=remind.kleinsorge.dev
+            - --cookie-samesite=lax
+            - --cookie-secure=true
+            - --reverse-proxy=true
+            - --pass-host-header=true
+            - --skip-provider-button=true
+            - --skip-auth-route=GET=^/healthz$
+          env:
+            - {name: OAUTH2_PROXY_CLIENT_ID, value: remind-sso}
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: remind-sso, key: clientSecret}
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef: {name: remind-sso, key: cookieSecret}
+          ports:
+            - {name: auth, containerPort: 4180}
+          readinessProbe:
+            httpGet: {path: /ping, port: auth}
+          livenessProbe:
+            httpGet: {path: /ping, port: auth}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: remind-data}
+        - name: config
+          configMap: {name: remind-config}

@@ -1,0 +1,66 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: remind
+  namespace: remind
+spec:
+  # The web server owns scheduling and review state. Never run both writers.
+  suspend: true
+  schedule: "0 5 * * *"
+  timeZone: America/New_York
+  startingDeadlineSeconds: 1800
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: remind
+              image: ghcr.io/joekleinsorge/remind:main
+              imagePullPolicy: IfNotPresent
+              args:
+                - "--config=/config/remind.json"
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 64Mi
+                limits:
+                  cpu: 250m
+                  memory: 256Mi
+              envFrom:
+                - secretRef:
+                    name: remind-sendgrid
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: config
+                  mountPath: /config
+                  readOnly: true
+                - name: data
+                  mountPath: /data
+          volumes:
+            - name: config
+              configMap:
+                name: remind-config
+                items:
+                  - key: remind.json
+                    path: remind.json
+            - name: data
+              persistentVolumeClaim:
+                claimName: remind-data

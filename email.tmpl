@@ -1,44 +1,53 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>Remind</title>
-	<style>
-		.header {
-			background-color: #468499;
-			padding: 20px;
-			text-align: center;
-		}
-		
-		.title {
-			color: #fff;
-			font-size: 24px;
-			margin: 0;
-		}
-	 gg	
-		.highlight {
-			padding: 10px;
-      margin-top: 10px;
-			margin-bottom: 10px; 	
-    }
-	</style>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Remind Daily Highlights</title>
 </head>
-<body>
-	<div class="header">
-		<h1 class="title">Remind</h1>
-	</div>
-		{{ range . }}
-		<div class="highlight">
-			<hr />
-			<dl>
-				<dt><strong>{{.Title}}</strong></dt>
-				<dt>by {{.Author}}</dt>
-				<dt>From Page {{.Page}}</dt>
-				<dt>Added on {{.When}}</dt>
-        <br>
-				<dt>{{.Highlight}}</dt>
-			</dl>
-		</div>
-		{{ end }}
+<body style="margin:0; padding:0; background-color:#f4f4f0; color:#222222;">
+	<div style="display:none; max-height:0; overflow:hidden; opacity:0;">{{ .Preheader }}</div>
+	<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f4f4f0; width:100%;">
+		<tr>
+			<td align="center" style="padding:24px 12px;">
+				<table role="presentation" width="640" cellspacing="0" cellpadding="0" border="0" style="width:100%; max-width:640px; background-color:#ffffff; border:1px solid #e6e2d7;">
+					<tr>
+						<td style="background-color:#203040; padding:28px 24px; font-family:Georgia, 'Times New Roman', serif;">
+							<p style="margin:0 0 8px 0; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:#bfd0dc;">Remind Daily Review</p>
+							<h1 style="margin:0; font-size:30px; line-height:1.2; font-weight:normal; color:#ffffff;">Your highlights for {{ .DateLabel }}</h1>
+							<p style="margin:10px 0 0 0; font-size:16px; line-height:1.5; color:#d9e6ee;">{{ .Preheader }}</p>
+						</td>
+					</tr>
+					<tr>
+						<td style="padding:4px 24px 24px 24px; font-family:Georgia, 'Times New Roman', serif;">
+							{{ range .Highlights }}
+							<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-top:1px solid #ece9df;">
+								<tr>
+									<td style="padding:20px 0;">
+										<p style="margin:0 0 8px 0; font-size:13px; line-height:1.4; color:#6a6a6a;">From <em>{{ .Title }}</em>{{ if .Author }} by {{ .Author }}{{ end }}</p>
+										<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+											<tr>
+												<td width="3" style="width:3px; background-color:#d6c8a2;"></td>
+												<td style="padding-left:14px;">
+													<p style="margin:0; font-size:22px; line-height:1.45; color:#1f1f1f;">{{ .Highlight }}</p>
+												</td>
+											</tr>
+										</table>
+										{{ if or .Page .Location .When }}
+										<p style="margin:12px 0 0 0; font-size:13px; line-height:1.4; color:#7d7d7d;">{{ if .Page }}Page {{ .Page }}{{ if or .Location .When }} &middot; {{ end }}{{ end }}{{ if .Location }}Location {{ .Location }}{{ if .When }} &middot; {{ end }}{{ end }}{{ if .When }}Added on {{ .When }}{{ end }}</p>
+										{{ end }}
+									</td>
+								</tr>
+							</table>
+							{{ end }}
+						</td>
+					</tr>
+					<tr>
+						<td style="padding:0 24px 24px 24px; font-family:Georgia, 'Times New Roman', serif; font-size:12px; line-height:1.5; color:#9a9a9a;">Sent by Remind so your old highlights stay useful.</td>
+					</tr>
+				</table>
+			</td>
+		</tr>
+	</table>
 </body>
 </html>
-

@@ -1,0 +1,19 @@
+.git
+.github
+.env
+sendgrid.env
+preview.html
+remind
+.DS_Store
+.remind-state.json
+clippings.txt
+My Clippings.txt
+*.pem
+*.key
+library.json
+email-day.json
+delivery-status.json
+.remind-import-*
+.remind-state-*.tmp
+freshlab
+.playwright-mcp

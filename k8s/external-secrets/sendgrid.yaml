@@ -1,0 +1,23 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: remind-sendgrid
+  namespace: remind
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: replace-with-your-store
+    kind: ClusterSecretStore
+  target:
+    name: remind-sendgrid
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: SENDGRID_API_KEY
+      remoteRef: {key: remind/sendgrid, property: apiKey}
+    - secretKey: SENDER_EMAIL
+      remoteRef: {key: remind/sendgrid, property: senderEmail}
+    - secretKey: RECIPIENT_EMAIL
+      remoteRef: {key: remind/sendgrid, property: recipientEmail}
+    - secretKey: REMIND_EMAIL_TIME
+      remoteRef: {key: remind/sendgrid, property: emailTime}
