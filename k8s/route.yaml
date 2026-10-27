@@ -14,4 +14,4 @@ spec:
     - matches:
         - path: {type: PathPrefix, value: /}
       backendRefs:
-        - {name: remind, port: 80}
+        - {group: "", kind: Service, name: remind, port: 80, weight: 1}
