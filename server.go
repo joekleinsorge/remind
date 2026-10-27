@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,20 +27,25 @@ var webFiles embed.FS
 
 // One server owns the data volume. The CLI must not write to it concurrently.
 type webApp struct {
-	mu            sync.Mutex
-	cfg           appConfig
-	library       []Clipping
-	state         ReminderState
-	delivery      deliveryStatus
-	libraryPath   string
-	emailTime     string
-	emailLocation *time.Location
-	send          func(string, string, string, string, string, string) error
+	mu             sync.Mutex
+	undo           map[string]reviewUndo
+	restorePending bool
+	cfg            appConfig
+	library        []Clipping
+	state          ReminderState
+	delivery       deliveryStatus
+	libraryPath    string
+	emailTime      string
+	emailLocation  *time.Location
+	send           func(string, string, string, string, string, string) error
 }
 
 func newWebApp(cfg appConfig) (*webApp, error) {
 	if err := os.MkdirAll(filepath.Dir(cfg.StatePath), 0o750); err != nil {
 		return nil, err
+	}
+	if err := recoverRestore(cfg.StatePath); err != nil {
+		return nil, fmt.Errorf("recover restore: %w", err)
 	}
 	state, err := loadReminderState(cfg.StatePath)
 	if err != nil {
@@ -115,6 +122,9 @@ func (a *webApp) handler() http.Handler {
 	mux.HandleFunc("/api/library", a.getLibrary)
 	mux.HandleFunc("/api/import", a.importLibrary)
 	mux.HandleFunc("/api/review", a.review)
+	mux.HandleFunc("/api/undo", a.undoReview)
+	mux.HandleFunc("/api/curate", a.curate)
+	mux.HandleFunc("/api/restore", a.restore)
 	mux.HandleFunc("/api/email-preview", a.preview)
 	mux.HandleFunc("/api/export", a.export)
 	mux.HandleFunc("/api/status", a.status)
@@ -167,6 +177,13 @@ func (a *webApp) handler() http.Handler {
 				return
 			}
 		}
+		a.mu.Lock()
+		pending := a.restorePending
+		a.mu.Unlock()
+		if pending {
+			http.Error(w, "Restore needs recovery. Restart Remind to finish restoring your backup.", 503)
+			return
+		}
 		mux.ServeHTTP(w, r)
 	})
 }
@@ -193,6 +210,10 @@ func (a *webApp) getLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.restorePending {
+		http.Error(w, "Restore needs recovery. Restart Remind.", 503)
+		return
+	}
 	now := time.Now()
 	type item struct {
 		Clipping
@@ -235,13 +256,17 @@ func (a *webApp) importLibrary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not read upload.", 400)
 		return
 	}
-	imported := parseClippings(string(content))
+	imported, report := parseClippingsReport(string(content))
 	if len(imported) == 0 {
-		http.Error(w, "No Kindle highlights found. Your library has not changed.", 400)
+		http.Error(w, fmt.Sprintf("No Kindle highlights found. Skipped %d malformed records and %d notes or bookmarks. Your library has not changed.", report.Malformed, report.Unsupported), 400)
 		return
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.restorePending {
+		http.Error(w, "Restore needs recovery. Restart Remind.", 503)
+		return
+	}
 	merged := append([]Clipping{}, a.library...)
 	seen := map[string]bool{}
 	for _, c := range merged {
@@ -261,7 +286,7 @@ func (a *webApp) importLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.library = merged
-	writeJSON(w, map[string]int{"added": added, "duplicates": len(imported) - added, "total": len(merged)})
+	writeJSON(w, map[string]int{"added": added, "duplicates": len(imported) - added + report.Duplicates, "total": len(merged), "malformed": report.Malformed, "unsupported": report.Unsupported})
 }
 
 func (a *webApp) review(w http.ResponseWriter, r *http.Request) {
@@ -279,6 +304,10 @@ func (a *webApp) review(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.restorePending {
+		http.Error(w, "Restore needs recovery. Restart Remind.", 503)
+		return
+	}
 	for _, c := range a.library {
 		if c.ID != input.ID {
 			continue
@@ -288,6 +317,13 @@ func (a *webApp) review(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		next := cloneState(a.state)
+		before, existed := a.state.Highlights[c.ID]
+		var tokenBytes [16]byte
+		if _, err := rand.Read(tokenBytes[:]); err != nil {
+			http.Error(w, "Could not prepare undo.", 500)
+			return
+		}
+		token := hex.EncodeToString(tokenBytes[:])
 		now := time.Now()
 		if input.Action == "remembered" {
 			next.MarkReviewed([]Clipping{c}, now, reviewIntervals(a.cfg.ReviewIntervalsDays))
@@ -309,7 +345,11 @@ func (a *webApp) review(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.state = next
-		writeJSON(w, next.Highlights[c.ID])
+		if a.undo == nil {
+			a.undo = map[string]reviewUndo{}
+		}
+		a.undo[c.ID] = reviewUndo{Token: token, Before: before, After: next.Highlights[c.ID], Existed: existed}
+		writeJSON(w, map[string]interface{}{"review": next.Highlights[c.ID], "undoToken": token})
 		return
 	}
 	http.Error(w, "Highlight not found.", 404)
@@ -321,7 +361,11 @@ func (a *webApp) preview(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	selected := selectClippings(a.library, a.cfg.Count, a.state, time.Now())
+	if a.restorePending {
+		http.Error(w, "Restore needs recovery. Restart Remind.", 503)
+		return
+	}
+	selected := selectEmailClippings(a.library, a.cfg.Count, a.state, time.Now())
 	_, _, html, err := buildEmail(selected, func() string { return time.Now().In(a.emailLocation).Format("Monday, January 2, 2006") }, a.cfg.TemplatePath)
 	if err != nil {
 		http.Error(w, "Could not render email.", 500)
@@ -339,6 +383,10 @@ func (a *webApp) export(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.restorePending {
+		http.Error(w, "Restore needs recovery. Restart Remind.", 503)
+		return
+	}
 	w.Header().Set("Content-Disposition", `attachment; filename="remind-export.json"`)
 	writeJSON(w, map[string]interface{}{"version": 1, "highlights": a.library, "state": a.state})
 }
@@ -349,6 +397,10 @@ func (a *webApp) status(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.restorePending {
+		http.Error(w, "Restore needs recovery. Restart Remind.", 503)
+		return
+	}
 	writeJSON(w, a.delivery)
 }
 
@@ -393,6 +445,9 @@ func emailConfigured() bool {
 func (a *webApp) sendDaily(now time.Time) (deliveryErr error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.restorePending {
+		return errors.New("restore needs recovery; restart Remind")
+	}
 	day := now.In(a.emailLocation).Format("2006-01-02")
 	marker := filepath.Join(filepath.Dir(a.cfg.StatePath), "email-day.json")
 	var lastDay string
@@ -407,7 +462,7 @@ func (a *webApp) sendDaily(now time.Time) (deliveryErr error) {
 	if lastDay == day {
 		return nil
 	}
-	selected := selectClippings(a.library, a.cfg.Count, a.state, now)
+	selected := selectEmailClippings(a.library, a.cfg.Count, a.state, now)
 	if len(selected) == 0 {
 		return nil
 	}
@@ -452,7 +507,7 @@ func (a *webApp) sendDaily(now time.Time) (deliveryErr error) {
 		return err
 	}
 	accepted = true
-	next.MarkReviewed(selected, now, reviewIntervals(a.cfg.ReviewIntervalsDays))
+	next.MarkEmailed(selected, now)
 	if err = saveReminderState(a.cfg.StatePath, next); err != nil {
 		return err
 	}

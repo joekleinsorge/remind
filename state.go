@@ -13,15 +13,20 @@ type ReminderState struct {
 }
 
 type HighlightState struct {
-	LastSentAt string `json:"last_sent_at,omitempty"`
-	NextDueAt  string `json:"next_due_at,omitempty"`
-	PendingAt  string `json:"pending_at,omitempty"`
-	CreatedAt  string `json:"created_at,omitempty"`
-	UpdatedAt  string `json:"updated_at,omitempty"`
-	Title      string `json:"title,omitempty"`
-	Author     string `json:"author,omitempty"`
-	Snippet    string `json:"snippet,omitempty"`
-	SendCount  int    `json:"send_count"`
+	LastSentAt    string `json:"last_sent_at,omitempty"`
+	NextDueAt     string `json:"next_due_at,omitempty"`
+	PendingAt     string `json:"pending_at,omitempty"`
+	CreatedAt     string `json:"created_at,omitempty"`
+	UpdatedAt     string `json:"updated_at,omitempty"`
+	Title         string `json:"title,omitempty"`
+	Author        string `json:"author,omitempty"`
+	Snippet       string `json:"snippet,omitempty"`
+	SendCount     int    `json:"send_count"`
+	Favorite      bool   `json:"favorite,omitempty"`
+	Archived      bool   `json:"archived,omitempty"`
+	Note          string `json:"note,omitempty"`
+	EmailCount    int    `json:"email_count,omitempty"`
+	LastEmailedAt string `json:"last_emailed_at,omitempty"`
 }
 
 func loadReminderState(path string) (ReminderState, error) {
@@ -101,6 +106,9 @@ func (state ReminderState) IsDue(clipping Clipping, now time.Time) bool {
 	review, ok := state.Highlights[clipping.ID]
 	if !ok {
 		return true
+	}
+	if review.Archived {
+		return false
 	}
 	if review.PendingAt != "" && !pendingReviewIsStale(review.PendingAt, now) {
 		return false
@@ -239,4 +247,18 @@ func pendingReviewIsStale(pendingAt string, now time.Time) bool {
 		return true
 	}
 	return parsed.Add(24 * time.Hour).Before(now.UTC())
+}
+
+// Provider acceptance records delivery independently from an explicit review.
+func (state *ReminderState) MarkEmailed(clippings []Clipping, now time.Time) {
+	if state.Highlights == nil {
+		state.Highlights = map[string]HighlightState{}
+	}
+	for _, c := range clippings {
+		review := state.Highlights[c.ID]
+		review.EmailCount++
+		review.LastEmailedAt = now.UTC().Format(time.RFC3339)
+		review.PendingAt = ""
+		state.Highlights[c.ID] = review
+	}
 }

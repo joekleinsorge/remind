@@ -12,9 +12,11 @@ import (
 )
 
 type importResult struct {
-	Added      int `json:"added"`
-	Duplicates int `json:"duplicates"`
-	Total      int `json:"total"`
+	Added       int `json:"added"`
+	Duplicates  int `json:"duplicates"`
+	Total       int `json:"total"`
+	Malformed   int `json:"malformed"`
+	Unsupported int `json:"unsupported"`
 }
 
 func importClippings(source io.Reader, endpoint string) (importResult, error) {

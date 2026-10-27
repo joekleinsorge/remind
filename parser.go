@@ -14,7 +14,23 @@ import (
 )
 
 func parseClippings(data string) []Clipping {
-	records := splitKindleRecords(data)
+	clips, _ := parseClippingsReport(data)
+	return clips
+}
+
+type parseReport struct {
+	Malformed   int
+	Unsupported int
+	Duplicates  int
+}
+
+func parseClippingsReport(data string) ([]Clipping, parseReport) {
+	report := parseReport{}
+	records, scanErr := splitKindleRecordsChecked(data)
+	if scanErr != nil {
+		report.Malformed++
+		return nil, report
+	}
 	clippingSlice := []Clipping{}
 	seen := map[string]bool{}
 
@@ -22,18 +38,21 @@ func parseClippings(data string) []Clipping {
 		recordNumber := idx + 1
 		parsed, err := parseKindleRecord(record)
 		if err != nil {
+			report.Malformed++
 			log.Printf("Skipping clipping %d due to parse error: %v", recordNumber, err)
 			continue
 		}
 
 		kind := strings.TrimSpace(strings.ToLower(parsed.Type))
 		if kind != "" && kind != "highlight" {
+			report.Unsupported++
 			log.Printf("Skipping clipping %d (%q): unsupported type %q", recordNumber, parsed.Title, parsed.Type)
 			continue
 		}
 
 		highlight := strings.TrimSpace(strings.ReplaceAll(parsed.Content, "\r\n", "\n"))
 		if highlight == "" {
+			report.Malformed++
 			log.Printf("Skipping clipping %d (%q): missing highlight body", recordNumber, parsed.Title)
 			continue
 		}
@@ -77,16 +96,22 @@ func parseClippings(data string) []Clipping {
 		}
 		newClipping.ID = clippingID(newClipping)
 		if seen[newClipping.ID] {
+			report.Duplicates++
 			continue
 		}
 		seen[newClipping.ID] = true
 		clippingSlice = append(clippingSlice, newClipping)
 	}
 
-	return clippingSlice
+	return clippingSlice, report
 }
 
 func splitKindleRecords(data string) []string {
+	records, _ := splitKindleRecordsChecked(data)
+	return records
+}
+
+func splitKindleRecordsChecked(data string) ([]string, error) {
 	normalized := strings.TrimPrefix(data, "\uFEFF")
 	normalized = strings.ReplaceAll(normalized, "\r\n", "\n")
 	normalized = strings.ReplaceAll(normalized, "\r", "\n")
@@ -109,7 +134,7 @@ func splitKindleRecords(data string) []string {
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Printf("Error while scanning clippings input: %v", err)
+		return nil, err
 	}
 
 	record := strings.TrimSpace(strings.Join(current, "\n"))
@@ -117,7 +142,7 @@ func splitKindleRecords(data string) []string {
 		records = append(records, record)
 	}
 
-	return records
+	return records, nil
 }
 
 func extractAddedOnDate(record string) string {

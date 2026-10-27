@@ -57,7 +57,7 @@ func main() {
 
 	now := time.Now()
 	dueCount := len(filterDueClippings(clippingSlice, state, now))
-	selectedClippings := selectClippings(clippingSlice, cfg.app.Count, state, now)
+	selectedClippings := selectEmailClippings(clippingSlice, cfg.app.Count, state, now)
 	log.Printf("Found %d due highlights; selected %d", dueCount, len(selectedClippings))
 	if len(selectedClippings) == 0 {
 		log.Println("No highlights are due for review.")
@@ -104,7 +104,7 @@ func main() {
 		log.Fatalf("Failed to send email: %s", err)
 	}
 
-	state.MarkReviewed(selectedClippings, now, reviewIntervals(cfg.app.ReviewIntervalsDays))
+	state.MarkEmailed(selectedClippings, now)
 	if err := saveReminderState(cfg.app.StatePath, state); err != nil {
 		log.Fatalf("Failed to save reminder state: %v", err)
 	}
