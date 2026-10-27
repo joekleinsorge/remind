@@ -4,9 +4,9 @@ These manifests prepare the deployment; their presence does not mean the app is 
 
 ## Prerequisites
 
-1. Run the image publishing workflow and download its `freshlab-remind` artifact. Copy the artifact's `remind/` directory to `apps/remind` in `joekleinsorge/freshlab`. The artifact is pinned to the published digest and omits Namespace resources because Freshlab's apps project does not allow them. The root ApplicationSet discovers this directory and uses `CreateNamespace=true`.
+1. Run the image publishing workflow and download its `freshlab-remind` artifact. Copy the artifact's `remind/` directory to `apps/remind` in `joekleinsorge/freshlab`. The artifact is pinned to the published digest and omits Namespace resources because Freshlab's apps project does not allow them. The root ApplicationSet discovers this directory and uses `CreateNamespace=false` for Remind; SOPS owns namespace creation.
 2. Add a `remind` namespace to the SOPS-managed `freshlab-secrets` namespace list, with `istio.io/dataplane-mode: none` and restricted Pod Security labels. It must exist before the secrets reconcile.
-3. Create a SOPS-encrypted Secret named `remind-sso` in namespace `remind`, with keys `clientSecret` and `cookieSecret`. Generate a unique client secret and a base64-encoded 32-byte cookie secret; never commit plaintext. Register its encrypted file with KSOPS.
+3. Create a SOPS-encrypted Secret named `remind-sso` in namespace `remind`, with keys `clientSecret` and `cookieSecret`. Generate a unique client secret and a URL-safe base64-encoded 32-byte cookie secret (Python: `base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()`); never commit plaintext. Register its encrypted file with KSOPS.
 4. Add a Dex static client in `platform/dex/values.yaml`:
 
    ```yaml

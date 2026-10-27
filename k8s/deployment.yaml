@@ -40,13 +40,13 @@ spec:
           # The application binds only loopback; probes run through the proxy's
           # one unauthenticated endpoint. All other paths require Dex login.
           readinessProbe:
-            httpGet: {path: /healthz, port: auth}
+            httpGet: {path: /healthz, port: 4180}
             periodSeconds: 10
           livenessProbe:
-            httpGet: {path: /healthz, port: auth}
+            httpGet: {path: /healthz, port: 4180}
             periodSeconds: 30
           startupProbe:
-            httpGet: {path: /healthz, port: auth}
+            httpGet: {path: /healthz, port: 4180}
             periodSeconds: 3
             failureThreshold: 30
           securityContext:
