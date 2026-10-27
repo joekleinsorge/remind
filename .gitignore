@@ -11,3 +11,4 @@ delivery-status.json
 .remind-state-*.tmp
 /freshlab/
 /.playwright-mcp/
+restore-pending.json

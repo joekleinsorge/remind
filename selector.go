@@ -102,6 +102,10 @@ func compareCandidates(left, right Clipping, state ReminderState) bool {
 		return leftReview.SendCount < rightReview.SendCount
 	}
 
+	if leftReview.Favorite != rightReview.Favorite {
+		return leftReview.Favorite
+	}
+
 	leftDue, leftDueOK := reviewDueDate(leftReview)
 	rightDue, rightDueOK := reviewDueDate(rightReview)
 	if leftDueOK && rightDueOK && !leftDue.Equal(rightDue) {
@@ -132,4 +136,18 @@ func reviewDueDate(review HighlightState) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	return parsed, true
+}
+
+// Rotate emailed passages without treating delivery as a review.
+func selectEmailClippings(clippings []Clipping, count int, state ReminderState, now time.Time) []Clipping {
+	candidates := filterDueClippings(clippings, state, now)
+	deliveryState := cloneState(state)
+	for _, c := range candidates {
+		review := deliveryState.Highlights[c.ID]
+		review.SendCount = review.EmailCount
+		review.NextDueAt = review.LastEmailedAt
+		review.PendingAt = ""
+		deliveryState.Highlights[c.ID] = review
+	}
+	return selectClippings(candidates, count, deliveryState, now)
 }

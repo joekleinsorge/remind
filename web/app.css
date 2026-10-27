@@ -576,3 +576,30 @@ dialog p {
     max-width:72%;
   }
 }
+/* Keep the passage close to the top when the library is established. */
+.intro.returning { padding:8px 0 24px; gap:24px; }
+.intro.returning h1 { font-size:30px; letter-spacing:-.7px; margin-bottom:0; }
+.intro.returning .subtitle { display:none; }
+.intro.returning .eyebrow { margin-bottom:7px; }
+.intro.returning .stats strong { font-size:26px; }
+.highlight-tools { display:flex; gap:8px; margin-top:20px; flex-wrap:wrap; }
+.highlight-tools .button { font-size:12px; padding:6px 10px; }
+.highlight-tools [aria-pressed=true] { background:var(--soft); }
+.notes { margin-top:16px; font-size:12px; }
+.notes summary { cursor:pointer; color:var(--green); padding:4px 0; }
+.notes label { display:block; margin:12px 0; }
+.notes textarea { display:block; width:100%; resize:vertical; margin-top:7px; background:var(--paper); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:10px; font:inherit; }
+.notes .muted { display:block; margin-top:7px; }
+textarea:focus-visible,summary:focus-visible { outline:3px solid #9caa72; outline-offset:4px; }
+#undo-bar { display:flex; gap:16px; align-items:center; margin:20px 0; font-size:13px; }
+.collection-filters,.backup-actions { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+.collection-filters { margin-top:14px; }
+.empty .button { margin:5px; }
+.action-buttons { flex-wrap:wrap; }
+@media(max-width:560px) {
+ .intro.returning { gap:20px; }
+ .intro.returning h1 { font-size:27px; }
+ .action-buttons { justify-content:flex-start; }
+ .card-top { flex-wrap:wrap; }
+ .book-title { max-width:100%; }
+}
