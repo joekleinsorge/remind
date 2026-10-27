@@ -6,7 +6,7 @@ Before using this overlay:
 
 1. Replace `replace-with-your-store` in both manifests with your existing `ClusterSecretStore` name. For a namespaced store, use `kind: SecretStore` and ensure it exists in `remind`.
 2. Create a remote `remind/sendgrid` object with properties `apiKey`, `senderEmail`, `recipientEmail`, and `emailTime`. Use a local `HH:MM` time such as `05:00` to enable daily delivery; an empty string disables it.
-3. Create a remote `remind/sso` object with `clientSecret` and `cookieSecret`. The client secret must match the Dex client. Use a base64-encoded 32-byte value for the cookie secret.
+3. Create a remote `remind/sso` object with `clientSecret` and `cookieSecret`. The client secret must match the Dex client. Use a URL-safe base64-encoded 32-byte value for the cookie secret.
 4. Adjust `remoteRef.key` and `property` if your provider uses different paths or field names. All referenced properties must exist. If email is not wanted, remove `sendgrid.yaml` from the overlay resources.
 
 Render the configured deployment and its managed secrets together before applying it:
