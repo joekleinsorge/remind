@@ -27,7 +27,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: remind
-          image: ghcr.io/joekleinsorge/remind:main
+          image: ghcr.io/joekleinsorge/remind:main@sha256:64abef222861ac7875b8f053d62ce1126460d9a303f28dd7d4b84b9d082f5862
           args: ["--serve=127.0.0.1:8080", "--config=/config/remind.json"]
           env:
             - {name: REMIND_TIMEZONE, value: America/New_York}

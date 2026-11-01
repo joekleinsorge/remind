@@ -12,4 +12,4 @@ resources:
 
 images:
   - name: ghcr.io/joekleinsorge/remind
-    newTag: main
+    newTag: main@sha256:64abef222861ac7875b8f053d62ce1126460d9a303f28dd7d4b84b9d082f5862
