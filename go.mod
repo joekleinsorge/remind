@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/hawx/kindle-clippings v0.0.0-20161230174831-3674004a3424
-	github.com/sendgrid/sendgrid-go v3.12.0+incompatible
+	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 )
 
 require (
